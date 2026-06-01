@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سبأمارت</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,sans-serif}
+body{background:#f0f4f8;color:#1e293b;padding:12px}
+.card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:12px}
+input{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:10px;margin:4px 0}
+button{background:#0f766e;color:#fff;border:none;padding:10px;border-radius:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px}
+.btn-sm{padding:6px 10px;width:auto;font-size:11px}
+.hidden{display:none}
+.log{background:#1e293b;color:#a5f3fc;padding:10px;border-radius:10px;max-height:200px;overflow-y:auto;font-family:monospace;font-size:11px}
+.server-item{display:flex;justify-content:space-between;align-items:center;padding:10px;background:#f1f5f9;border-radius:8px;margin:4px 0}
+h2{color:#0f766e;margin-bottom:12px;font-size:18px}
+h3{margin-bottom:8px;font-size:15px}
+.err{color:#ef4444;text-align:center;margin-top:8px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="login" class="card">
+  <h2 style="text-align:center">🔐 بوابة مسؤول النظام</h2>
+  <input id="u" value="1" placeholder="رقم المستخدم">
+  <input id="p" type="password" value="SYS_admin@2026" placeholder="كلمة المرور">
+  <button onclick="login()">دخول آمن</button>
+  <p id="err" class="err" style="display:none">بيانات غير صحيحة</p>
+</div>
+
+<div id="dash" class="hidden">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h2 style="margin:0">🛠️ أدوات الإدارة</h2>
+      <button class="btn-sm" onclick="location.reload()" style="background:#ef4444">خروج</button>
+    </div>
+    <div id="btns" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"></div>
+  </div>
+
+  <div class="card">
+    <h3>🖥️ إدارة السيرفرات</h3>
+    <input id="sn" placeholder="اسم السيرفر">
+    <input id="sh" placeholder="المضيف (127.0.0.1)">
+    <input id="sp" placeholder="المنفذ (3306)">
+    <button onclick="addSrv()" style="background:#2563eb">➕ إضافة سيرفر</button>
+    <div id="srvs" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h3>📜 سجل العمليات</h3>
+    <div class="log" id="log">جاري التحميل...</div>
+  </div>
+</div>
+
+<script>
+async function login(){
+  const r = await fetch('/api/login',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      userId:document.getElementById('u').value,
+      password:document.getElementById('p').value
+    })
+  });
+  const d = await r.json();
+  if(!d.success){ document.getElementById('err').style.display='block'; return; }
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('dash').classList.remove('hidden');
+  loadActions(); loadSrvs(); loadLogs();
+}
+
+function loadActions(){
+  const acts=['فتح قاعدة بيانات جديدة','تحديث قاعدة البيانات','استرجاع نسخة احتياطية','تحديث جداول العملاء','تحديث جدول الموردين','تحديث المخزون والاصناف','تحديث العملات','تحديث القيود اليومية','تحديث الارصدة والجورنال','تحديث تسلسل المستندات','إعادة ترحيل المستندات','إلغاء ترحيل الفواتير','حل المشاكل (Fix)','فحص المعلقات','فحص التحويلات بين الفروع','تحديث التقارير','إنشاء قاعدة بيانات اختبار'];
+  document.getElementById('btns').innerHTML = acts.map(n => '<button onclick="run(\'' + n + '\')">' + n + '</button>').join('');
+}
+
+async function run(n){
+  if(!confirm('تنفيذ "' + n + '"؟')) return;
+  const r = await fetch('/api/action/' + encodeURIComponent(n), {method:'POST'});
+  const d = await r.json();
+  if(d.success){ alert(d.message); loadLogs(); }
+}
+
+async function addSrv(){
+  const name=document.getElementById('sn').value.trim();
+  const host=document.getElementById('sh').value.trim();
+  const port=document.getElementById('sp').value.trim()||'3306';
+  if(!name||!host) return alert('أدخل الاسم والمضيف');
+  await fetch('/api/servers',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:name,host:host,port:port,database:'sabamart_db',user:'root'})
+  });
+  document.getElementById('sn').value='';
+  document.getElementById('sh').value='';
+  document.getElementById('sp').value='';
+  loadSrvs(); loadLogs();
+  alert('✅ تم إضافة السيرفر');
+}
+
+async function loadSrvs(){
+  const r = await fetch('/api/servers');
+  const s = await r.json();
+  document.getElementById('srvs').innerHTML = s.map(x =>
+    '<div class="server-item"><div><strong>' + x.name + '</strong><br><small>' + x.host + ':' + x.port + '</small></div><button class="btn-sm" onclick="delSrv(' + x.id + ')" style="background:#dc2626">حذف</button></div>'
+  ).join('') || '<div style="color:#64748b;text-align:center;padding:10px">لا توجد سيرفرات</div>';
+}
+
+async function delSrv(id){
+  if(!confirm('حذف هذا السيرفر؟')) return;
+  await fetch('/api/servers/' + id, {method:'DELETE'});
+  loadSrvs(); loadLogs();
+}
+
+async function loadLogs(){
+  const r = await fetch('/api/logs');
+  const l = await r.json();
+  document.getElementById('log').innerHTML = l.map(x =>
+    '<div><span style="color:#64748b">[' + new Date(x.time).toLocaleString('ar-EG') + ']</span> ' + x.action + ' → ' + x.details + '</div>'
+  ).join('') || '<div>لا توجد سجلات</div>';
+}
+</script>
+</body>
+</html>
